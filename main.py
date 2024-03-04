@@ -3,16 +3,18 @@ import importlib
 import torchvision
 from utils import *
 from models.fscil_trainer import FSCILTrainer
-
-# MODEL_DIR=r'D:\fscil_lmu\pretrain\cifar100\cifar100_id_11316_bs_256.pth'
-MODEL_DIR=None
+# C:\Users\qinzh\PycharmProjects\TFG\checkpoint\mini_imagenet\session0_max_acc_11641.pth
+# C:\Users\qinzh\PycharmProjects\TFG\checkpoint\cifar100\session0_max_acc_11599.pth
+# C:\Users\qinzh\PycharmProjects\TFG\checkpoint\cub200\session0_max_acc_11626.pth
+MODEL_DIR=r'C:\Users\qinzh\PycharmProjects\TFG\checkpoint\mini_imagenet\session0_max_acc_11641.pth'
+# MODEL_DIR=None
 DATA_DIR = 'D:/fscil_lmu/data/'
 
 def get_command_line_parser():
     parser = argparse.ArgumentParser()
 
     # about dataset and network
-    parser.add_argument('-dataset', type=str, default='cifar100',
+    parser.add_argument('-dataset', type=str, default='mini_imagenet',
                         choices=['mini_imagenet', 'cub200', 'cifar100'])
     parser.add_argument('-dataroot', type=str, default=DATA_DIR)
 
@@ -30,7 +32,7 @@ def get_command_line_parser():
     parser.add_argument('-decay', type=float, default=0.001)
     parser.add_argument('-momentum', type=float, default=0.9)
     parser.add_argument('-gamma', type=float, default=0.1)
-    parser.add_argument('-temperature', type=int, default=8)
+    parser.add_argument('-temperature', type=int, default=16)
     parser.add_argument('-not_data_init', action='store_true', help='using average data embedding to init or not')
 
     parser.add_argument('-batch_size_base', type=int, default=128)

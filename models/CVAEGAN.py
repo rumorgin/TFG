@@ -37,8 +37,6 @@ class ConditionalBatchNorm1d(nn.BatchNorm1d):
             bias = bias.unsqueeze(0)
         size = output.size()
         weight = weight.expand(size)
-        # print(weight.shape)
-        # print(output.shape)
         bias = bias.expand(size)
         return weight * output + bias
 
@@ -65,43 +63,6 @@ class LinearConditionalBatchNorm1d(ConditionalBatchNorm1d):
 
         return super(LinearConditionalBatchNorm1d, self).forward(
             input, weight, bias)
-
-
-# Define the supervised contrastive learning loss
-class SupConLoss(nn.Module):
-    def __init__(self, temperature=0.07):
-        super(SupConLoss, self).__init__()
-        self.temperature = temperature
-
-    def forward(self, features, labels):
-        # Normalize the feature vectors
-        features_normalized = nn.functional.normalize(features, dim=-1, p=2)
-
-        # Calculate the similarity matrix
-        similarity_matrix = torch.matmul(features_normalized, features_normalized.T) / self.temperature
-
-        # Gather positive and negative pairs
-        mask = labels.expand(labels.size(0), labels.size(0)).eq(labels.expand(labels.size(0), labels.size(0)).T)
-        positives = similarity_matrix[mask].view(labels.size(0), -1)
-
-        # Calculate the loss
-        negatives = similarity_matrix[~mask].view(labels.size(0), -1)
-
-        # Adjust the shape of positives and negatives
-        positives = positives.unsqueeze(2)
-        negatives = negatives.unsqueeze(0)
-
-        # Concatenate positives and negatives along the third dimension
-        logits = torch.cat([positives, negatives], dim=2)
-
-        # Flatten the logits for cross-entropy loss
-        logits = logits.view(-1, 2)
-
-        # Generate target labels (0 for positives, 1 for negatives)
-        targets = torch.zeros(logits.size(0), dtype=torch.long).to(labels.device)
-
-        # Calculate the cross-entropy loss
-        return nn.functional.cross_entropy(logits, targets)
 
 
 def weights_init(model):
@@ -147,9 +108,6 @@ class VAE_encoder(nn.Module):
 
         self.fc_mu = nn.Linear(self.latent_dim * 2, self.out_feature)
         self.fc_var = nn.Linear(self.latent_dim * 2, self.out_feature)
-
-        self.classifier = nn.Linear(self.out_feature, self.num_class)
-
         self.apply(weights_init)
 
     def encode(self, x):
@@ -205,16 +163,12 @@ class VAE_decoder(nn.Module):
                                                                     num_features=self.latent_dim * 2)
         self.Lrelu = nn.LeakyReLU()
 
-        # self.semantic_transfer=nn.Linear(self.class_dim,self.out_feature)
-
         self.final_layer = nn.Sequential(
             nn.Linear(self.latent_dim * 2, self.out_feature))
 
         self.apply(weights_init)
 
     def forward(self, z, label):
-        # label=self.semantic_transfer(label)
-        # z = torch.cat((z,label),dim=1)
         z = self.linear1(z)
         z = self.conditional_batch_norm1(z, label)
         z = self.Lrelu(z)
@@ -262,5 +216,4 @@ class Discriminator(nn.Module):
     def forward(self, image):
         hidden = self.feature_extractor(image)
         disc = self.sigmoid(self.discriminate(hidden))
-        # classifier = self.softmax(self.classifer(hidden))
         return disc, hidden

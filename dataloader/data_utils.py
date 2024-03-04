@@ -35,7 +35,6 @@ def get_dataloader(args,session):
     return trainset, trainloader, testloader
 
 def get_base_dataloader(args):
-    txt_path = "data/index_list/" + args.dataset + "/session_" + str(0 + 1) + '.txt'
     class_index = np.arange(args.base_class)
     if args.dataset == 'cifar100':
 

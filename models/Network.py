@@ -15,26 +15,20 @@ class MYNET(nn.Module):
 
         self.mode = mode
         self.args = args
-        # self.num_features = 512
         if self.args.dataset in ['cifar100']:
-            self.feature_extractor = resnet18()
-            self.num_features = 64
+            self.feature_extractor = resnet18(num_classes=100)
         if self.args.dataset in ['mini_imagenet']:
-            self.feature_extractor = resnet18( False, args)  # pretrained=False
-            self.num_features = 512
+            self.feature_extractor = resnet18( False, args, num_classes=100)  # pretrained=False
         if self.args.dataset == 'cub200':
-            self.feature_extractor = resnet18(True, args, num_classes=200)  # pretrained=True follow TOPIC, models for cub is imagenet pre-trained. https://github.com/xyutao/fscil/issues/11#issuecomment-687548790
-            self.num_features = 512
-            state_dict = torch.load(r'D:\fscil_lmu\pretrain\resnet18-5c106cde.pth', map_location=torch.device('cpu'))
-            filtered_state_dict = {k: v for k, v in state_dict.items() if 'fc' not in k}
-            self.feature_extractor.load_state_dict(filtered_state_dict, strict=False)
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+            self.feature_extractor = resnet18(False, args, num_classes=200)
+            # state_dict = torch.load(r'D:\fscil_lmu\pretrain\resnet18-5c106cde.pth', map_location=torch.device('cpu'))
+            # filtered_state_dict = {k: v for k, v in state_dict.items() if 'fc' not in k}
+            # self.feature_extractor.load_state_dict(filtered_state_dict, strict=False)
 
         self.encoder = VAE_encoder(in_feature=512, out_feature=256, latent_dim=1024)
         self.decoder = VAE_decoder(in_feature=256, out_feature=512, latent_dim=256, class_dim=768)
         self.discriminator = Discriminator(in_feature=512, latent_dim=256, class_dim=768, output_cell=self.args.num_classes)
 
-        # self.fc = nn.Linear(self.num_features, self.args.num_classes)
 
     def forward(self,  *args):
         if self.mode == 'train_vaegan_classifier':
@@ -43,8 +37,6 @@ class MYNET(nn.Module):
             word_embedding=args[2]
 
             real_feature = self.feature_extractor(image)
-
-            # latent_z = self.encoder(real_feature)
 
             logits = F.linear(F.normalize(real_feature, p=2, dim=-1),
                                   F.normalize(self.feature_extractor.fc.weight, p=2, dim=-1))
@@ -117,8 +109,6 @@ class MYNET(nn.Module):
 
             real_feature = self.feature_extractor(image)
 
-            # latent_z = self.encoder(real_feature)
-
             real_logits = F.linear(F.normalize(real_feature, p=2, dim=-1),
                                    F.normalize(self.feature_extractor.fc.weight, p=2, dim=-1))
             real_logits = self.args.temperature * real_logits[:, :self.args.base_class+session*self.args.way]
@@ -131,11 +121,6 @@ class MYNET(nn.Module):
             labels=args[1]
             word_embedding=args[2]
             session=args[3]
-
-            # total_class = self.args.base_class + self.args.episode_shot * session
-            # word_embedding = word_embedding.repeat_interleave(self.args.episode_shot, 0)
-            # num_sample = total_class * self.args.episode_shot
-            # label = torch.arange(0, total_class).repeat_interleave(self.args.episode_shot,0).cuda()
 
             noise = torch.randn((labels.shape[0], 256)).cuda()
             gen_feature = self.decoder(z=noise, label=word_embedding)
@@ -166,9 +151,7 @@ class MYNET(nn.Module):
         gen_feature = self.decoder(z=noise, label=word_embedding)
 
         optimizer = torch.optim.SGD(self.feature_extractor.fc.parameters(), lr=0.0001, momentum=0.9)
-        old_weights = self.feature_extractor.fc.weight[:self.args.base_class + self.args.way * (session - 1), :].detach()
 
-        # sup_con_loss=losses.SupConLoss()
         for batch in dataloader:
             data, label, _ = [_.cuda() for _ in batch]
             data = self.feature_extractor(data).squeeze().detach()
@@ -185,15 +168,9 @@ class MYNET(nn.Module):
                 combine_feature = torch.cat((data, gen_feature.detach()), dim=0)
                 old_label = torch.arange(0, num_class).repeat_interleave(self.args.episode_shot, 0).cuda()
                 combine_label = torch.cat((label, old_label), dim=0)
-                new_logits = self.args.temperature * F.linear(F.normalize(combine_feature, p=2, dim=-1), F.normalize(self.feature_extractor.fc.weight, p=2, dim=-1))
-                old_logits = self.args.temperature * F.linear(F.normalize(combine_feature, p=2, dim=-1),
-                                                              F.normalize(old_weights, p=2, dim=-1))
-                # Compute the knowledge distillation loss using KL divergence
-                # knowledge_distillation_loss = F.kl_div(F.log_softmax(new_logits[:,:self.args.base_class + self.args.way * (session - 1)]), F.softmax(old_logits), reduction='batchmean') *self.args.temperature*self.args.temperature
-
+                new_logits = self.args.temperature * F.linear(F.normalize(combine_feature, p=2, dim=-1),
+                                                              F.normalize(self.feature_extractor.fc.weight, p=2, dim=-1))
                 Acc = count_acc(new_logits, combine_label)
-                # loss_con = sup_con_loss(logits, combine_label)
-                # loss = F.cross_entropy(new_logits[:, :num_class], combine_label) + 1e7*knowledge_distillation_loss
                 loss = F.cross_entropy(new_logits[:, :num_class], combine_label)
                 loss.backward()
                 optimizer.step()
@@ -225,24 +202,3 @@ class MYNET(nn.Module):
             gp = ((norm - 1.0) ** 2).mean()
             return gp
 
-def scl_loss(outputs, labels):
-    # Get pairwise similarity matrix
-    sim_matrix = torch.matmul(outputs, outputs.t())
-
-    # Extract positive and negative pairs
-    pos_mask = (labels.unsqueeze(1) == labels.unsqueeze(0)).float()
-    neg_mask = 1 - pos_mask
-
-    # Compute positive and negative logits
-    pos_logits = sim_matrix * pos_mask
-    neg_logits = sim_matrix * neg_mask
-
-    # Apply temperature scaling
-    temperature = 0.5
-    pos_logits /= temperature
-    neg_logits /= temperature
-
-    # Compute contrastive loss
-    loss = F.cross_entropy(pos_logits, torch.zeros_like(pos_logits)) + \
-           F.cross_entropy(neg_logits, torch.ones_like(neg_logits))
-    return loss

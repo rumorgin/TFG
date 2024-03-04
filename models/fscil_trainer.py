@@ -1,6 +1,7 @@
 import torch.nn as nn
 from copy import deepcopy
 from .Network import MYNET
+import torch.nn.functional as F
 # from .helper import *
 from utils import *
 from dataloader.data_utils import *
@@ -52,8 +53,8 @@ class FSCILTrainer(object):
 
     def update_param(self, model, pretrained_dict):
         model_dict = model.state_dict()
-        pretrained_dict = {k.replace('module.encoder', 'feature_extractor'): v for k, v in pretrained_dict.items()}
-        pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
+        # pretrained_dict = {k.replace('module.encoder','feature_extractor'): v for k, v in pretrained_dict.items()}
+        pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict }
         model_dict.update(pretrained_dict)
         model.load_state_dict(model_dict)
         return model
@@ -114,14 +115,13 @@ class FSCILTrainer(object):
 
                 for epoch in range(args.epochs_base):
                     start_time = time.time()
-                    # train base sess
 
-                    # visualize(self.model, trainloader, epoch, args, session)
 
-                    tl, ta = combine_train(self.model, trainloader, optimizer, scheduler, epoch, args, session)
+
+                    tl, ta = classifier_train(self.model, trainloader, optimizer, scheduler, epoch, args, session)
 
                     # self.model = replace_base_fc(train_set, testloader.dataset.transform, self.model, args)
-
+                    # visualize(self.model, trainloader, epoch, args, session)
                     # test model with all seen class
                     tsl, tsa = test(self.model, testloader, epoch, args, session)
 
@@ -154,38 +154,41 @@ class FSCILTrainer(object):
                 result_list.append('Session {}, Test Best Epoch {},\nbest test Acc {:.4f}\n'.format(
                     session, self.trlog['max_acc_epoch'], self.trlog['max_acc'][session], ))
 
-                # for epoch in range(args.epochs_base):
-                #     start_time = time.time()
-                #     # train base sess
-                #     tl, ta = generator_train(self.model, trainloader, optimizer, scheduler, epoch, args, session)
-                #
-                #     # test model with all seen class
-                #     tsl, tsa = gan_test(self.model, testloader, epoch, args, session)
-                #
-                #     # save better model
-                #     if (tsa * 100) >= self.trlog['max_acc_gen'][session]:
-                #         self.trlog['max_acc_gen'][session] = float('%.3f' % (tsa * 100))
-                #         self.trlog['max_acc_epoch_gen'] = epoch
-                #         save_model_dir = os.path.join(args.save_path, 'session' + str(session) + '_max_acc.pth')
-                #         torch.save(dict(params=self.model.state_dict()), save_model_dir)
-                #         # torch.save(optimizer.state_dict(), os.path.join(args.save_path, 'optimizer_best.pth'))
-                #         self.best_model_dict = deepcopy(self.model.state_dict())
-                #         print('********A better model is found!!**********')
-                #         print('Saving model to :%s' % save_model_dir)
-                #     print('best epoch {}, best test gen acc={:.3f}'.format(self.trlog['max_acc_epoch_gen'],
-                #                                                        self.trlog['max_acc_gen'][session]))
-                #
-                #     self.trlog['train_loss_gen'].append(tl)
-                #     self.trlog['train_acc_gen'].append(ta)
-                #     self.trlog['test_loss_gen'].append(tsl)
-                #     self.trlog['test_acc_gen'].append(tsa)
-                #     lrc = scheduler.get_last_lr()[0]
-                #     result_list.append(
-                #         'epoch:%03d,lr:%.4f,training_loss:%.5f,training_acc:%.5f,test_loss:%.5f,test_acc:%.5f' % (
-                #             epoch, lrc, tl, ta, tsl, tsa))
-                #     print('This epoch takes %d seconds' % (time.time() - start_time),
-                #           '\nstill need around %.2f mins to finish this session' % (
-                #                   (time.time() - start_time) * (args.epochs_base - epoch) / 60))
+                if args.dataset == 'mini_imagenet' or args.dataset == 'cub200':
+                    self.model = replace_base_fc(train_set, testloader.dataset.transform, self.model, args)
+
+                for epoch in range(args.epochs_base):
+                    start_time = time.time()
+                    # train base sess
+                    tl, ta = generator_train(self.model, trainloader, optimizer, scheduler, epoch, args, session)
+
+                    # test model with all seen class
+                    tsl, tsa = gan_test(self.model, testloader, epoch, args, session)
+
+                    # save better model
+                    if (tsa * 100) >= self.trlog['max_acc_gen'][session]:
+                        self.trlog['max_acc_gen'][session] = float('%.3f' % (tsa * 100))
+                        self.trlog['max_acc_epoch_gen'] = epoch
+                        save_model_dir = os.path.join(args.save_path, 'session' + str(session) + '_max_acc.pth')
+                        torch.save(dict(params=self.model.state_dict()), save_model_dir)
+                        # torch.save(optimizer.state_dict(), os.path.join(args.save_path, 'optimizer_best.pth'))
+                        self.best_model_dict = deepcopy(self.model.state_dict())
+                        print('********A better model is found!!**********')
+                        print('Saving model to :%s' % save_model_dir)
+                    print('best epoch {}, best test gen acc={:.3f}'.format(self.trlog['max_acc_epoch_gen'],
+                                                                       self.trlog['max_acc_gen'][session]))
+
+                    self.trlog['train_loss_gen'].append(tl)
+                    self.trlog['train_acc_gen'].append(ta)
+                    self.trlog['test_loss_gen'].append(tsl)
+                    self.trlog['test_acc_gen'].append(tsa)
+                    lrc = scheduler.get_last_lr()[0]
+                    result_list.append(
+                        'epoch:%03d,lr:%.4f,training_loss:%.5f,training_acc:%.5f,test_loss:%.5f,test_acc:%.5f' % (
+                            epoch, lrc, tl, ta, tsl, tsa))
+                    print('This epoch takes %d seconds' % (time.time() - start_time),
+                          '\nstill need around %.2f mins to finish this session' % (
+                                  (time.time() - start_time) * (args.epochs_base - epoch) / 60))
 
             else:  # incremental learning sessions
                 print("training session: [%d]" % session)
@@ -351,30 +354,82 @@ def combine_train(model, trainloader, optimizer, scheduler, epoch, args, session
         else:
             data, train_label, word_embedding = [_ for _ in batch]
 
-        model.mode = 'train_vaegan_classifier'
+        real_feature = model.feature_extractor(data)
 
-        Acc ,loss = model(data.squeeze(),train_label,word_embedding)
+        logits = F.linear(F.normalize(real_feature, p=2, dim=-1),
+                          F.normalize(model.feature_extractor.fc.weight, p=2, dim=-1))
+        logits = args.temperature * logits[:, :args.base_class]
+        loss = F.cross_entropy(logits, train_label)
+        Acc = count_acc(logits, train_label)
 
         optimizer_resnet.zero_grad()
         loss.backward()
         optimizer_resnet.step()
 
-        model.mode = 'train_vaegan_generator'
-        Acc_gen, encoder_loss, generator_loss, d_loss = model( data, train_label, word_embedding)
+        real_feature = model.feature_extractor(data)
+
+        latent_z, mu, logvar = model.encoder(real_feature)
+
+        kld_loss = torch.mean(-0.5 * torch.sum(1 + logvar - mu ** 2 - logvar.exp(), dim=1), dim=0)
+        recon_feature = model.decoder(z=latent_z, label=word_embedding)
+
+        noise = torch.randn((train_label.size(0), 256)).cuda()
+
+        gen_feature = model.decoder(z=noise, label=word_embedding)
+
+        real_adv, real_f = model.discriminator(image=real_feature)
+        gen_adv, gen_f = model.discriminator(image=gen_feature.detach())
+        recon_adv, recon_f = model.discriminator(image=recon_feature.detach())
+
+        recons_loss = F.mse_loss(recon_f, real_f)
+
+        encoder_loss = recons_loss + kld_loss
 
         optimizer_encoder.zero_grad()
-        encoder_loss.backward(retain_graph=True)
+        encoder_loss.backward()
         optimizer_encoder.step()
 
+        gen_logits = F.linear(F.normalize(gen_feature, p=2, dim=-1),
+                              F.normalize(model.feature_extractor.fc.weight, p=2, dim=-1))
+        gen_logits = args.temperature * gen_logits[:, :args.base_class]
+
+        recon_logits = F.linear(F.normalize(recon_feature, p=2, dim=-1),
+                                F.normalize(model.feature_extractor.fc.weight, p=2, dim=-1))
+        recon_logits = args.temperature * recon_logits[:, :args.base_class]
+
+        real_logits = F.linear(F.normalize(real_feature, p=2, dim=-1),
+                               F.normalize(model.feature_extractor.fc.weight, p=2, dim=-1))
+        real_logits = args.temperature * real_logits[:, :args.base_class]
+
+        class_loss = F.cross_entropy(gen_logits, train_label)
+
+        g_disc_loss = -torch.log(gen_adv + 1e-8).mean() - torch.log(recon_adv + 1e-8).mean()
+
+        generator_loss = g_disc_loss + class_loss
+
         optimizer_decoder.zero_grad()
-        generator_loss.backward(retain_graph=True)
+        generator_loss.backward()
         optimizer_decoder.step()
 
+        dbinary_loss = -(torch.log(1 - gen_adv + 1e-8).mean() + torch.log(1 - recon_adv + 1e-8).mean() + torch.log(
+            real_adv + 1e-8).mean())
+
+        dclass_loss = F.cross_entropy(real_logits, train_label) + F.cross_entropy(
+            gen_logits[:, :args.base_class], train_label) + F.cross_entropy(
+            recon_logits[:, :args.base_class], train_label)
+
+        gp = model.gradient_penalty(model.discriminator, real_feature, gen_feature)
+
+        d_loss = dbinary_loss + dclass_loss + gp
+
+        Acc_gen = count_acc(gen_logits, train_label)
+
+
         optimizer_gan_discriminator.zero_grad()
-        d_loss.backward(retain_graph=True)
+        d_loss.backward()
         optimizer_gan_discriminator.step()
 
-        total_loss=generator_loss+d_loss + loss
+        total_loss = generator_loss + d_loss
 
         tqdm_gen.set_description(
             'Session {},epoch {},  Loss_Enc= {:.4f}  Loss_D= {:.4f}  Loss_Dec= {:.4f}, Acc_fake={:.4f}, Acc_real={:.4f}'.format(
@@ -482,172 +537,6 @@ def replace_base_fc(trainset, transform, model, args):
 
     return model
 
-def incremental_phase(model, trainloader, optimizer, scheduler, session, args):
-
-    model = model.train()
-
-    optimizer_encoder = torch.optim.Adam(model.encoder.parameters(), lr=0.0005,
-                                         betas=(0.5, 0.999))
-
-    optimizer_decoder = torch.optim.Adam(model.decoder.parameters(), lr=0.0005,
-                                         betas=(0.5, 0.999))
-
-    optimizer_gan_discriminator = torch.optim.Adam(model.discriminator.parameters(), lr=0.0005,
-                                                   betas=(0.5, 0.999))
-
-    num_class = args.base_class + session * args.way
-    tl = Averager()
-
-    model_old = MYNET(args, mode=args.base_mode).cuda()
-    model_old.load_state_dict(deepcopy(model.state_dict()))
-    model_old.eval()
-    for param in model_old.parameters():
-        param.requires_grad = False
-
-    for i, batch in enumerate(trainloader, 1):
-        if args.use_gpu:
-            data, true_label, word_embedding = [_.cuda() for _ in batch]
-        else:
-            data, true_label, word_embedding = [_ for _ in batch]
-
-        wnids = trainloader.dataset.wnids
-        word_embedding = torch.tensor([
-            ast.literal_eval(trainloader.dataset.word_embedding[key]) for key in wnids[:num_class]]).cuda()
-
-        tqdm_gen=tqdm(range(1200))
-
-        for n in tqdm_gen:
-            model.mode = 'incremental_vaegan_generator'
-            encoder_loss, generator_loss, d_loss, Acc_real, Acc_recon, Acc_gen  = model(model_old, data,true_label,word_embedding, session)
-
-            optimizer_encoder.zero_grad()
-            encoder_loss.backward(retain_graph=True)
-            optimizer_encoder.step()
-
-            optimizer_decoder.zero_grad()
-            generator_loss.backward(retain_graph=True)
-            optimizer_decoder.step()
-
-            optimizer_gan_discriminator.zero_grad()
-            d_loss.backward(retain_graph=True)
-            optimizer_gan_discriminator.step()
-
-            total_loss = encoder_loss + generator_loss + d_loss
-
-            tqdm_gen.set_description(
-                'Session {}, epoch={:d}, Loss_D= {:.4f}  Loss_Enc= {:.4f} Loss_Dec= {:.4f}, Acc_real={:.4f}, Acc_recon={:.4f}, Acc_fake={:.4f}'.format(
-                    session, n, d_loss.item(), encoder_loss.item(), generator_loss.item(),Acc_real,Acc_recon,Acc_gen))
-
-
-        tl.add(total_loss.item())
-
-        tl = tl.item()
-    return tl
-
-def incremental_phase_another(model, trainloader, optimizer, scheduler, session, args):
-
-    # for name, param in model.feature_extractor.named_parameters():
-    #     if not name == 'fc':
-    #         param.requires_grad = False
-
-    optimizer_encoder = torch.optim.Adam(model.encoder.parameters(), lr=0.0001,
-                                         betas=(args.beta, 0.999))
-
-    optimizer_decoder = torch.optim.Adam(model.decoder.parameters(), lr=0.0002,
-                                         betas=(args.beta, 0.999))
-
-    optimizer_gan_discriminator = torch.optim.Adam(model.discriminator.parameters(), lr=0.0002,
-                                                   betas=(args.beta, 0.999))
-
-    num_class = args.base_class + session * args.way
-    tl = Averager()
-
-    model_old = MYNET(args, mode=args.base_mode).cuda()
-    model_old.load_state_dict(deepcopy(model.state_dict()))
-    model_old.eval()
-    for param in model_old.parameters():
-        param.requires_grad = False
-
-    model = model.train()
-
-    transform = transforms.Compose([
-        transforms.RandomHorizontalFlip(),
-        transforms.RandomVerticalFlip(),
-        transforms.ColorJitter()
-        # v2.RandAugment()
-        # v2.RandomHorizontalFlip(),
-        # v2.ColorJitter(),
-        # v2.AutoAugment(v2.AutoAugmentPolicy.IMAGENET)
-    ])
-
-    tqdm_gen = tqdm(range(100))
-    for i, batch in enumerate(trainloader, 1):
-        if args.use_gpu:
-            data, true_label, word_embedding = [_.cuda() for _ in batch]
-        else:
-            data, true_label, word_embedding = [_ for _ in batch]
-
-        if args.dataset=='mini_imagenet':
-            wnids = trainloader.dataset.wnids
-            word_embedding = torch.tensor([
-                ast.literal_eval(trainloader.dataset.word_embedding[key]) for key in wnids[:num_class]]).cuda()
-        elif args.dataset=='cifar100':
-            word_embedding = torch.tensor([
-                ast.literal_eval(trainloader.dataset.word_embedding[str(key)]) for key in range(0,num_class)]).cuda()
-
-        for j in tqdm_gen:
-            data=transform(data)
-
-            model.mode = 'incremental_classifier_another'
-            classify_loss, Acc_gen_and_real, Acc_real = model(model_old, data,true_label,word_embedding, session)
-
-            optimizer_encoder.zero_grad()
-            classify_loss.backward()
-            optimizer_encoder.step()
-
-            total_loss = classify_loss
-
-            tqdm_gen.set_description(
-                'Session {}, epoch={:d}, classify_loss= {:.4f}, Acc_real={:.4f}, Acc_fake={:.4f}'.format(
-                    session, j, classify_loss.item(), Acc_real, Acc_gen_and_real))
-
-        tl.add(total_loss.item())
-
-        tl = tl.item()
-
-    tqdm_gen = tqdm(range(100))
-    for i, batch in enumerate(trainloader, 1):
-        if args.use_gpu:
-            data, true_label, word_embedding = [_.cuda() for _ in batch]
-        else:
-            data, true_label, word_embedding = [_ for _ in batch]
-
-        wnids = trainloader.dataset.wnids
-        word_embedding = torch.tensor([
-            ast.literal_eval(trainloader.dataset.word_embedding[key]) for key in wnids[:num_class]]).cuda()
-
-        for j in tqdm_gen:
-            data = transform(data)
-
-            model.mode = 'incremental_generator_another'
-            generator_loss, d_loss, Acc_real, Acc_gen = model(model_old, data, true_label, word_embedding, session)
-
-            optimizer_decoder.zero_grad()
-            generator_loss.backward(retain_graph=True)
-            optimizer_decoder.step()
-
-            optimizer_gan_discriminator.zero_grad()
-            d_loss.backward(retain_graph=True)
-            optimizer_gan_discriminator.step()
-
-            total_loss = generator_loss + d_loss
-
-            tqdm_gen.set_description(
-                'Session {}, epoch={:d}, Loss_D= {:.4f} Loss_Dec= {:.4f}, Acc_real={:.4f}, Acc_fake={:.4f}'.format(
-                    session, j, d_loss.item(), generator_loss.item(),Acc_real,Acc_gen))
-
-    return tl
-
 
 def visualize(model, testloader, epoch, args, session):
     # replace fc.weight with the embedding average of train data
@@ -667,15 +556,17 @@ def visualize(model, testloader, epoch, args, session):
         dataset_embeddings.append(real_embedding.detach().cpu().numpy())
         true_labels.append(label.cpu().numpy())
 
-        noise = torch.randn((label.size(0), 768)).cuda()
+        noise = torch.randn((label.size(0), 256)).cuda()
         gen_feature = model.decoder(z=noise, label=word_embedding)
 
         fake_embeddings.append(gen_feature.detach().cpu().numpy())
         fake_labels.append(label.cpu().numpy())
 
     dataset_embeddings = np.concatenate(dataset_embeddings, axis=0)
+    dataset_embeddings = (dataset_embeddings - dataset_embeddings.mean(axis=0)) / dataset_embeddings.std(axis=0)
     true_labels = np.concatenate(true_labels, axis=0)
     fake_embeddings = np.concatenate(fake_embeddings, axis=0)
+    fake_embeddings = (fake_embeddings - fake_embeddings.mean(axis=0)) / fake_embeddings.std(axis=0)
     fake_labels = np.concatenate(fake_labels, axis=0)
 
     class_indices = np.where((true_labels >= 1) & (true_labels <= 10))[0]
