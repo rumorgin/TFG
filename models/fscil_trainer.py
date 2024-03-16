@@ -1,15 +1,15 @@
-import torch.nn as nn
 from copy import deepcopy
-from .Network import MYNET
+
 import torch.nn.functional as F
+from matplotlib import pyplot as plt
+from sklearn.manifold import TSNE
+from tqdm import tqdm
+
+from dataloader.data_utils import *
 # from .helper import *
 from utils import *
-from dataloader.data_utils import *
-from tqdm import tqdm
-import ast
-from sklearn.manifold import TSNE
-from matplotlib import pyplot as plt
-from torchvision.transforms import transforms
+from .Network import MYNET
+
 
 class FSCILTrainer(object):
     def __init__(self, args):
@@ -38,7 +38,7 @@ class FSCILTrainer(object):
         self.trlog['max_acc'] = [0.0] * args.sessions
         self.trlog['max_acc_epoch_gen'] = 0
         self.trlog['max_acc_gen'] = [0.0] * args.sessions
-        self.model = MYNET(self.args, mode=self.args.base_mode)
+        self.model = MYNET(self.args)
         if args.use_gpu:
             self.model = self.model.cuda()
 
@@ -54,36 +54,27 @@ class FSCILTrainer(object):
     def update_param(self, model, pretrained_dict):
         model_dict = model.state_dict()
         # pretrained_dict = {k.replace('module.encoder','feature_extractor'): v for k, v in pretrained_dict.items()}
-        pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict }
+        pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
         model_dict.update(pretrained_dict)
         model.load_state_dict(model_dict)
         return model
+
     def get_optimizer_base(self):
-        optimizer_resnet=torch.optim.SGD(self.model.feature_extractor.parameters(),lr=self.args.lr_base,
-                                    momentum=0.9, nesterov=True, weight_decay=self.args.decay)
+        optimizer_resnet = torch.optim.SGD(self.model.feature_extractor.parameters(), lr=self.args.lr_base,
+                                           momentum=0.9, nesterov=True, weight_decay=self.args.decay)
 
-        optimizer_encoder = torch.optim.Adam(self.model.decoder.parameters(), self.args.lr_gan,betas=(self.args.beta, 0.999))
+        optimizer_encoder = torch.optim.Adam(self.model.decoder.parameters(), self.args.lr_gan,
+                                             betas=(self.args.beta, 0.999))
 
-        optimizer_decoder = torch.optim.Adam(self.model.decoder.parameters(), self.args.lr_gan,betas=(self.args.beta, 0.999))
+        optimizer_decoder = torch.optim.Adam(self.model.decoder.parameters(), self.args.lr_gan,
+                                             betas=(self.args.beta, 0.999))
 
-        optimizer_gan_discriminator=torch.optim.Adam(self.model.discriminator.parameters(), self.args.lr_gan,betas=(self.args.beta, 0.999))
+        optimizer_gan_discriminator = torch.optim.Adam(self.model.discriminator.parameters(), self.args.lr_gan,
+                                                       betas=(self.args.beta, 0.999))
 
-        if self.args.schedule == 'Step':
-            scheduler_resnet = torch.optim.lr_scheduler.StepLR(optimizer_resnet, step_size=self.args.step,
-                                                           gamma=self.args.gamma)
-            # scheduler_encoder = torch.optim.lr_scheduler.StepLR(optimizer_encoder, step_size=self.args.step,
-            #                                                gamma=self.args.gamma)
-        elif self.args.schedule == 'Milestone':
-            scheduler_resnet = torch.optim.lr_scheduler.MultiStepLR(optimizer_resnet, milestones=self.args.milestones,
-                                                           gamma=self.args.gamma)
-            # scheduler_encoder = torch.optim.lr_scheduler.MultiStepLR(optimizer_encoder, milestones=self.args.milestones,
-            #                                                gamma=self.args.gamma)
-        elif self.args.schedule == 'Cosine':
-            scheduler_resnet = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_resnet, T_max=self.args.epochs_base)
-            # scheduler_encoder = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_encoder, T_max=self.args.epochs_base)
+        scheduler_resnet = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_resnet, T_max=self.args.epochs_base)
 
-
-        optimizer=[optimizer_resnet,optimizer_encoder,optimizer_decoder,optimizer_gan_discriminator]
+        optimizer = [optimizer_resnet, optimizer_encoder, optimizer_decoder, optimizer_gan_discriminator]
 
         return optimizer, scheduler_resnet
 
@@ -116,12 +107,10 @@ class FSCILTrainer(object):
                 for epoch in range(args.epochs_base):
                     start_time = time.time()
 
-
-
                     tl, ta = classifier_train(self.model, trainloader, optimizer, scheduler, epoch, args, session)
 
                     # self.model = replace_base_fc(train_set, testloader.dataset.transform, self.model, args)
-                    # visualize(self.model, trainloader, epoch, args, session)
+
                     # test model with all seen class
                     tsl, tsa = test(self.model, testloader, epoch, args, session)
 
@@ -176,7 +165,7 @@ class FSCILTrainer(object):
                         print('********A better model is found!!**********')
                         print('Saving model to :%s' % save_model_dir)
                     print('best epoch {}, best test gen acc={:.3f}'.format(self.trlog['max_acc_epoch_gen'],
-                                                                       self.trlog['max_acc_gen'][session]))
+                                                                           self.trlog['max_acc_gen'][session]))
 
                     self.trlog['train_loss_gen'].append(tl)
                     self.trlog['train_acc_gen'].append(ta)
@@ -194,9 +183,10 @@ class FSCILTrainer(object):
                 print("training session: [%d]" % session)
 
                 self.model.eval()
-                trainloader.dataset.transform = testloader.dataset.transform
-                self.model.update_fc_another(trainloader,np.unique(train_set.targets), session)
 
+                trainloader.dataset.transform = testloader.dataset.transform
+                self.model.update_fc_another(trainloader, np.unique(train_set.targets), session)
+                # visualize(self.model, testloader, 0, args, session)
                 tsl, tsa = test(self.model, testloader, 0, args, session)
 
                 # save model
@@ -209,7 +199,6 @@ class FSCILTrainer(object):
 
                 result_list.append('Session {}, test Acc {:.3f}\n'.format(session, self.trlog['max_acc'][session]))
 
-
         result_list.append('Base Session Best Epoch {}\n'.format(self.trlog['max_acc_epoch']))
         result_list.append(self.trlog['max_acc'])
         print(self.trlog['max_acc'])
@@ -221,42 +210,29 @@ class FSCILTrainer(object):
         print('Total time used %.2f mins' % total_time)
 
     def set_save_path(self):
-        mode = self.args.base_mode + '-' + self.args.new_mode
-        if not self.args.not_data_init:
-            mode = mode + '-' + 'data_init'
 
         self.args.save_path = '%s/' % self.args.dataset
         self.args.save_path = self.args.save_path + '/'
 
-        self.args.save_path = self.args.save_path + '%s-start_%d/' % (mode, self.args.start_session)
+        self.args.save_path = self.args.save_path + 'start_%d/' % (self.args.start_session)
 
         ## add the slurm process id
         job_id = os.environ.get('SLURM_JOB_ID')
         self.args.save_path = self.args.save_path + 'slurm_id_%s/' % str(job_id)
 
-        if self.args.schedule == 'Milestone':
-            mile_stone = str(self.args.milestones).replace(" ", "").replace(',', '_')[1:-1]
-            self.args.save_path = self.args.save_path + 'Epo_%d-Lr_%.4f-MS_%s-Gam_%.2f-Bs_%d-Mom_%.2f' % (
-                self.args.epochs_base, self.args.lr_base, mile_stone, self.args.gamma, self.args.batch_size_base,
-                self.args.momentum)
-        elif self.args.schedule == 'Step':
-            self.args.save_path = self.args.save_path + 'Epo_%d-Lr_%.4f-Step_%d-Gam_%.2f-Bs_%d-Mom_%.2f' % (
-                self.args.epochs_base, self.args.lr_base, self.args.step, self.args.gamma, self.args.batch_size_base,
-                self.args.momentum)
-        elif self.args.schedule == 'Cosine':
-            self.args.save_path = self.args.save_path + 'Epo_%d-Lr_%.4f-Step_%d-Gam_%.2f-Bs_%d-Mom_%.2f' % (
-                self.args.epochs_base, self.args.lr_base, self.args.step, self.args.gamma, self.args.batch_size_base,
-                self.args.momentum)
-        if 'cos' in mode:
-            self.args.save_path = self.args.save_path + '-T_%.2f' % (self.args.temperature)
+        self.args.save_path = self.args.save_path + 'Epo_%d-Lr_%.4f-Gam_%.2f-Bs_%d-Mom_%.2f' % (
+            self.args.epochs_base, self.args.lr_base, self.args.gamma, self.args.batch_size_base,
+            self.args.momentum)
+
+        self.args.save_path = self.args.save_path + '-T_%.2f' % (self.args.temperature)
 
         self.args.save_path = os.path.join('checkpoint', self.args.save_path)
         ensure_path(self.args.save_path)
         return None
 
-def classifier_train(model, trainloader, optimizer, scheduler, epoch, args, session):
 
-    optimizer_resnet,optimizer_encoder, optimizer_decoder, optimizer_gan_discriminator = optimizer[0], optimizer[
+def classifier_train(model, trainloader, optimizer, scheduler, epoch, args, session):
+    optimizer_resnet, optimizer_encoder, optimizer_decoder, optimizer_gan_discriminator = optimizer[0], optimizer[
         1], optimizer[2], optimizer[3]
 
     tl = Averager()
@@ -272,7 +248,7 @@ def classifier_train(model, trainloader, optimizer, scheduler, epoch, args, sess
 
         model.mode = 'train_vaegan_classifier'
 
-        Acc ,loss = model(data.squeeze(),train_label,word_embedding)
+        Acc, loss = model(data.squeeze(), train_label, word_embedding)
 
         optimizer_resnet.zero_grad()
         loss.backward()
@@ -280,7 +256,7 @@ def classifier_train(model, trainloader, optimizer, scheduler, epoch, args, sess
 
         lrc = scheduler.get_last_lr()[0]
         tqdm_gen.set_description(
-            'epoch {}, lr={:.4f}  classify_loss= {:.4f},  Acc_real={:.4f}'.format(epoch,lrc, loss.item(), Acc))
+            'epoch {}, lr={:.4f}  classify_loss= {:.4f},  Acc_real={:.4f}'.format(epoch, lrc, loss.item(), Acc))
 
         tl.add(loss.item())
         ta.add(Acc)
@@ -289,9 +265,9 @@ def classifier_train(model, trainloader, optimizer, scheduler, epoch, args, sess
     ta = ta.item()
     return tl, ta
 
-def generator_train(model, trainloader, optimizer, scheduler, epoch, args, session):
 
-    optimizer_resnet,optimizer_encoder, optimizer_decoder, optimizer_gan_discriminator = optimizer[0], optimizer[
+def generator_train(model, trainloader, optimizer, scheduler, epoch, args, session):
+    optimizer_resnet, optimizer_encoder, optimizer_decoder, optimizer_gan_discriminator = optimizer[0], optimizer[
         1], optimizer[2], optimizer[3]
 
     tl = Averager()
@@ -308,7 +284,7 @@ def generator_train(model, trainloader, optimizer, scheduler, epoch, args, sessi
             data, train_label, word_embedding = [_ for _ in batch]
 
         model.mode = 'train_vaegan_generator'
-        Acc_gen, encoder_loss, generator_loss, d_loss = model( data, train_label, word_embedding)
+        Acc_gen, encoder_loss, generator_loss, d_loss = model(data, train_label, word_embedding)
 
         optimizer_encoder.zero_grad()
         encoder_loss.backward(retain_graph=True)
@@ -322,11 +298,11 @@ def generator_train(model, trainloader, optimizer, scheduler, epoch, args, sessi
         d_loss.backward(retain_graph=True)
         optimizer_gan_discriminator.step()
 
-        total_loss=generator_loss+d_loss
+        total_loss = generator_loss + d_loss
 
         tqdm_gen.set_description(
             'Session {},epoch {},  Loss_Enc= {:.4f}  Loss_D= {:.4f}  Loss_Dec= {:.4f}, Acc_fake={:.4f}'.format(
-                session,epoch,encoder_loss.item(), d_loss.item(), generator_loss.item(),  Acc_gen))
+                session, epoch, encoder_loss.item(), d_loss.item(), generator_loss.item(), Acc_gen))
 
         tl.add(total_loss.item())
         ta.add(Acc_gen)
@@ -336,9 +312,9 @@ def generator_train(model, trainloader, optimizer, scheduler, epoch, args, sessi
 
     return tl, ta
 
-def combine_train(model, trainloader, optimizer, scheduler, epoch, args, session):
 
-    optimizer_resnet,optimizer_encoder, optimizer_decoder, optimizer_gan_discriminator = optimizer[0], optimizer[
+def combine_train(model, trainloader, optimizer, scheduler, epoch, args, session):
+    optimizer_resnet, optimizer_encoder, optimizer_decoder, optimizer_gan_discriminator = optimizer[0], optimizer[
         1], optimizer[2], optimizer[3]
 
     tl = Averager()
@@ -424,7 +400,6 @@ def combine_train(model, trainloader, optimizer, scheduler, epoch, args, session
 
         Acc_gen = count_acc(gen_logits, train_label)
 
-
         optimizer_gan_discriminator.zero_grad()
         d_loss.backward()
         optimizer_gan_discriminator.step()
@@ -433,7 +408,7 @@ def combine_train(model, trainloader, optimizer, scheduler, epoch, args, session
 
         tqdm_gen.set_description(
             'Session {},epoch {},  Loss_Enc= {:.4f}  Loss_D= {:.4f}  Loss_Dec= {:.4f}, Acc_fake={:.4f}, Acc_real={:.4f}'.format(
-                session,epoch,encoder_loss.item(), d_loss.item(), generator_loss.item(),  Acc_gen, Acc))
+                session, epoch, encoder_loss.item(), d_loss.item(), generator_loss.item(), Acc_gen, Acc))
 
         tl.add(total_loss.item())
         ta.add(Acc)
@@ -462,7 +437,7 @@ def gan_test(model, testloader, epoch, args, session):
             acc = model(data, test_label, word_embedding, session)
 
             tqdm_gen.set_description(
-                'epoch {},  Acc_com={:.4f}'.format(epoch,  acc))
+                'epoch {},  Acc_com={:.4f}'.format(epoch, acc))
 
             vl.add(0)
             va.add(acc)
@@ -472,6 +447,7 @@ def gan_test(model, testloader, epoch, args, session):
     print('epo {}, test, loss={:.4f} acc={:.4f}'.format(epoch, vl, va))
 
     return vl, va
+
 
 def test(model, testloader, epoch, args, session):
     test_class = args.base_class + session * args.way
@@ -491,7 +467,7 @@ def test(model, testloader, epoch, args, session):
             acc = model(data, test_label, word_embedding, session)
 
             tqdm_gen.set_description(
-                'epoch {},  Acc_com={:.4f}'.format(epoch,  acc))
+                'epoch {},  Acc_com={:.4f}'.format(epoch, acc))
 
             vl.add(0)
             va.add(acc)
@@ -501,6 +477,7 @@ def test(model, testloader, epoch, args, session):
     print('epo {}, test, loss={:.4f} acc={:.4f}'.format(epoch, vl, va))
 
     return vl, va
+
 
 def replace_base_fc(trainset, transform, model, args):
     # replace fc.weight with the embedding average of train data
@@ -538,7 +515,7 @@ def replace_base_fc(trainset, transform, model, args):
     return model
 
 
-def visualize(model, testloader, epoch, args, session):
+def visualize(model, trainloader, epoch, args, session):
     # replace fc.weight with the embedding average of train data
     model = model.eval()
     dataset_embeddings = []
@@ -547,7 +524,7 @@ def visualize(model, testloader, epoch, args, session):
     fake_labels = []
     # data_list=[]
     # with torch.no_grad():
-    for i, batch in enumerate(testloader):
+    for i, batch in enumerate(trainloader):
         data, label, word_embedding = [_.cuda() for _ in batch]
 
         real_embedding = model.feature_extractor(data).squeeze()
@@ -569,7 +546,7 @@ def visualize(model, testloader, epoch, args, session):
     fake_embeddings = (fake_embeddings - fake_embeddings.mean(axis=0)) / fake_embeddings.std(axis=0)
     fake_labels = np.concatenate(fake_labels, axis=0)
 
-    class_indices = np.where((true_labels >= 1) & (true_labels <= 10))[0]
+    class_indices = np.where((true_labels >= 45) & (true_labels <= 54))[0]
     dataset_embeddings = dataset_embeddings[class_indices]
     true_labels = true_labels[class_indices]
     fake_embeddings = fake_embeddings[class_indices]
@@ -580,10 +557,11 @@ def visualize(model, testloader, epoch, args, session):
     real_embeddings_2d = tsne.fit_transform(dataset_embeddings)
 
     # Create a scatter plot of the t-SNE embeddings for real images
-    plt.scatter(real_embeddings_2d[:, 0], real_embeddings_2d[:, 1], c=true_labels)
+    plt.scatter(real_embeddings_2d[:, 0], real_embeddings_2d[:, 1], c=true_labels, s=5)
     plt.title("t-SNE Visualization of Real Images")
     plt.xlabel("Dimension 1")
     plt.ylabel("Dimension 2")
+    plt.savefig("real_image_before.pdf")
     plt.show()
 
     # Concatenate real and fake embeddings and labels
@@ -594,9 +572,11 @@ def visualize(model, testloader, epoch, args, session):
     combined_embeddings_2d = tsne.fit_transform(combined_embeddings)
 
     # Create a scatter plot of the t-SNE embeddings for real and fake images
-    plt.scatter(combined_embeddings_2d[:, 0], combined_embeddings_2d[:, 1], c=combined_labels)
+    plt.scatter(combined_embeddings_2d[:1000, 0], combined_embeddings_2d[:1000, 1], c=true_labels, alpha=1, s=5)
+    plt.scatter(combined_embeddings_2d[1000:, 0], combined_embeddings_2d[1000:, 1], c=fake_labels, alpha=0.2, s=5)
     plt.title("t-SNE Visualization of Real and Fake Images")
     plt.xlabel("Dimension 1")
     plt.ylabel("Dimension 2")
+    plt.savefig("real_and_fake_image_before.pdf")
     plt.show()
     print('aa')
