@@ -19,16 +19,15 @@ class MYNET(nn.Module):
             self.feature_extractor = resnet18(False, args, num_classes=100)  # pretrained=False
         if self.args.dataset == 'cub200':
             self.feature_extractor = resnet18(False, args, num_classes=200)
-            state_dict = torch.load('/share/home/zyliu/home/qinzhili/FSCIL/pretrain/resnet18-5c106cde.pth',
-                                    map_location=torch.device('cpu'))
+            state_dict = torch.load(r'D:\fscil_lmu\pretrain\resnet18-5c106cde.pth', map_location=torch.device('cpu'))
             filtered_state_dict = {k: v for k, v in state_dict.items() if 'fc' not in k}
             self.feature_extractor.load_state_dict(filtered_state_dict, strict=False)
 
-        self.encoder = VAE_encoder(in_feature=512, out_feature=args.output_length, latent_dim=args.hidden_length)
-        self.decoder = VAE_decoder(in_feature=args.output_length, out_feature=512, latent_dim=args.hidden_length,
-                                   class_dim=768)
-        self.discriminator = Discriminator(in_feature=512, latent_dim=args.hidden_length,
-                                           output_cell=self.args.num_classes)
+
+        self.encoder = VAE_encoder(in_feature=512, out_feature=256, latent_dim=1024)
+        self.decoder = VAE_decoder(in_feature=256, out_feature=512, latent_dim=256, class_dim=768)
+        self.discriminator = Discriminator(in_feature=512, latent_dim=256, class_dim=768, output_cell=self.args.num_classes)
+
 
     def forward(self, *args):
         if self.mode == 'train_vaegan_classifier':

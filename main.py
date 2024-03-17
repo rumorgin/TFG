@@ -5,9 +5,9 @@ from utils import *
 
 # C:\Users\qinzh\PycharmProjects\TFG\checkpoint\mini_imagenet\session0_max_acc_11641.pth
 # C:\Users\qinzh\PycharmProjects\TFG\checkpoint\cifar100\session0_max_acc_11599.pth
-# C:\Users\qinzh\PycharmProjects\TFG\checkpoint\cub200\session0_max_acc_11626.pth
-# MODEL_DIR=r'C:\Users\qinzh\PycharmProjects\TFG\checkpoint\cifar100\session0_max_acc_11599.pth'
-MODEL_DIR = None
+# C:\Users\qinzh\PycharmProjects\TFG\checkpoint\cub200\session0_max_acc_11783.pth
+MODEL_DIR=r'C:\Users\qinzh\PycharmProjects\TFG\checkpoint\cub200\session0_max_acc_11783.pth'
+# MODEL_DIR = None
 DATA_DIR = 'D:/fscil_lmu/data/'
 
 
@@ -15,13 +15,13 @@ def get_command_line_parser():
     parser = argparse.ArgumentParser()
 
     # about dataset and network
-    parser.add_argument('-dataset', type=str, default='cifar100',
+    parser.add_argument('-dataset', type=str, default='cub200',
                         choices=['mini_imagenet', 'cub200', 'cifar100'])
     parser.add_argument('-dataroot', type=str, default=DATA_DIR)
     parser.add_argument('-model_dir', type=str, default=MODEL_DIR, help='loading model parameter from a specific dir')
     # about pre-training
-    parser.add_argument('-epochs_base', type=int, default=150)  ## for code test set to 1 default: 100
-    parser.add_argument('-lr_base', type=float, default=0.1)
+    parser.add_argument('-epochs_base', type=int, default=1)  ## for code test set to 1 default: 100
+    parser.add_argument('-lr_base', type=float, default=0.0001)
     parser.add_argument('-lr_gan', type=float, default=0.0001)
     parser.add_argument('-beta', type=float, default=0.5)
     parser.add_argument('-decay', type=float, default=0.001)

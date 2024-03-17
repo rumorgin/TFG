@@ -51,6 +51,11 @@ cub200
 
     $ python main.py -dataset cub200 -epochs_base 150 -lr_base 0.01 -batch_size_base 128 -dataroot YOUR_DATA_PATH
 
+## Notice
+
+Different machines may yield different results; therefore, we provide the trained model parameters for users 
+to check the results of our work. The trained model parameters are located in the `checkpoint` directory. 
+To use them, set the base learning rate to 0.0001 and run the model.
 
 ## Acknowledgment
 
