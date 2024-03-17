@@ -54,7 +54,8 @@ cub200
 ## Notice
 
 Different machines may yield different results; therefore, we provide the trained model parameters for users 
-to check the results of our work. The trained model parameters are located in the `checkpoint` directory. 
+to check the results of our work in this [link](https://drive.google.com/drive/folders/12c_alUWFYSBu1392V1sIrTJsI0YnQrWc?usp=drive_link) 
+Then move trained model parameters to the `checkpoint` directory. 
 To use them, set the base learning rate to 0.0001 and run the model.
 
 ## Acknowledgment
